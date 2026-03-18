@@ -1,32 +1,41 @@
 import { useState } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CreditCard, Smartphone, Building, Wallet, CheckCircle, AlertCircle } from 'lucide-react';
+import { CreditCard, Smartphone, Building, Wallet, CheckCircle, AlertCircle, Mail } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const paymentMethods = [
   { id: 'UPI', label: 'UPI', icon: Smartphone, cashback: '0%' },
   { id: 'Card', label: 'Credit/Debit Card', icon: CreditCard, cashback: '2%' },
   { id: 'Net Banking', label: 'Net Banking', icon: Building, cashback: '1%' },
   { id: 'Wallet', label: 'Wallet Payment', icon: Wallet, cashback: '5%' },
+  { id: 'Email', label: 'Email Transfer', icon: Mail, cashback: '1%' },
 ];
 
 const Payments = () => {
   const { makePayment, totalBalance, walletBalance } = useFinance();
+  const { addNotification } = useNotifications();
   const [recipient, setRecipient] = useState('');
   const [accountId, setAccountId] = useState('');
+  const [recipientEmail, setRecipientEmail] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [method, setMethod] = useState('');
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [cashbackEarned, setCashbackEarned] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
+  const [notifiedEmail, setNotifiedEmail] = useState('');
 
   const handlePayment = () => {
     if (!recipient || !amount || !method || !description) {
       setErrorMsg('Please fill all fields');
+      setStatus('error');
+      return;
+    }
+    if (method === 'Email' && !recipientEmail) {
+      setErrorMsg('Please enter recipient email address');
       setStatus('error');
       return;
     }
@@ -42,12 +51,30 @@ const Payments = () => {
       return;
     }
 
-    const result = makePayment(recipient, amt, method, description);
+    const result = makePayment(recipient, amt, method === 'Email' ? 'Net Banking' : method, description);
     if (result.success) {
       setCashbackEarned(result.cashback);
       setStatus('success');
+
+      // Send in-app notification
+      addNotification(
+        `Payment of ₹${amt.toLocaleString('en-IN')} sent to ${recipient}${method === 'Email' ? ` (${recipientEmail})` : ''} for "${description}"`,
+        'payment'
+      );
+
+      if (result.cashback > 0) {
+        addNotification(`🎉 Cashback of ₹${result.cashback.toFixed(0)} credited to your wallet!`, 'cashback');
+      }
+
+      if (method === 'Email' && recipientEmail) {
+        // Simulate email notification to recipient
+        addNotification(`📧 Payment notification sent to ${recipientEmail}`, 'system');
+        setNotifiedEmail(recipientEmail);
+      }
+
       setRecipient('');
       setAccountId('');
+      setRecipientEmail('');
       setAmount('');
       setDescription('');
       setMethod('');
@@ -87,7 +114,22 @@ const Payments = () => {
                 🎉 You earned ₹{cashbackEarned.toFixed(0)} cashback!
               </motion.p>
             )}
-            <Button onClick={() => setStatus('idle')} className="mt-4 bg-primary text-primary-foreground">Make Another Payment</Button>
+            {notifiedEmail && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="mt-3 p-3 rounded-lg bg-info/10 border border-info/20 inline-flex items-center gap-2"
+              >
+                <Mail className="w-4 h-4 text-info" />
+                <span className="text-sm text-info">Notification sent to <strong>{notifiedEmail}</strong></span>
+              </motion.div>
+            )}
+            <div className="mt-6">
+              <Button onClick={() => { setStatus('idle'); setNotifiedEmail(''); }} className="bg-primary text-primary-foreground">
+                Make Another Payment
+              </Button>
+            </div>
           </motion.div>
         ) : (
           <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card p-6 space-y-5">
@@ -100,7 +142,7 @@ const Payments = () => {
             {/* Payment Method Selection */}
             <div>
               <label className="text-sm font-medium mb-3 block">Payment Method</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 {paymentMethods.map(pm => (
                   <button
                     key={pm.id}
@@ -123,10 +165,43 @@ const Payments = () => {
                 <Input value={recipient} onChange={e => setRecipient(e.target.value)} placeholder="Enter name" className="bg-secondary/50" />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Account / UPI ID</label>
-                <Input value={accountId} onChange={e => setAccountId(e.target.value)} placeholder="Enter ID" className="bg-secondary/50" />
+                <label className="text-sm font-medium mb-1.5 block">
+                  {method === 'Email' ? 'Recipient Email' : 'Account / UPI ID'}
+                </label>
+                {method === 'Email' ? (
+                  <Input
+                    type="email"
+                    value={recipientEmail}
+                    onChange={e => setRecipientEmail(e.target.value)}
+                    placeholder="user@example.com"
+                    className="bg-secondary/50"
+                  />
+                ) : (
+                  <Input value={accountId} onChange={e => setAccountId(e.target.value)} placeholder="Enter ID" className="bg-secondary/50" />
+                )}
               </div>
             </div>
+
+            {/* Show email field alongside account ID for non-email methods */}
+            {method !== 'Email' && method !== '' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="overflow-hidden"
+              >
+                <label className="text-sm font-medium mb-1.5 block flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5 text-info" />
+                  Recipient Email <span className="text-xs text-muted-foreground">(optional — for payment notification)</span>
+                </label>
+                <Input
+                  type="email"
+                  value={recipientEmail}
+                  onChange={e => setRecipientEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="bg-secondary/50"
+                />
+              </motion.div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -140,7 +215,7 @@ const Payments = () => {
             </div>
 
             <Button onClick={handlePayment} className="w-full h-12 bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90">
-              Send Payment
+              {method === 'Email' ? '📧 Send Payment & Notify' : 'Send Payment'}
             </Button>
           </motion.div>
         )}
