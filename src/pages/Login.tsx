@@ -26,10 +26,10 @@ const Login = () => {
     if (!email || !password) { setError('Please fill all fields'); return; }
     setLoading(true);
     setError('');
-    const success = await login(email, password);
+    const result = await login(email, password);
     setLoading(false);
-    if (success) navigate('/dashboard');
-    else setError('Invalid credentials');
+    if (result.success) navigate('/dashboard');
+    else setError(result.error || 'Invalid credentials');
   };
 
   const securityFeatures = [

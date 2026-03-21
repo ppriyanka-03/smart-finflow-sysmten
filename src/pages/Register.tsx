@@ -25,9 +25,10 @@ const Register = () => {
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true);
     setError('');
-    const success = await register(name, email, password);
+    const result = await register(name, email, password);
     setLoading(false);
-    if (success) navigate('/dashboard');
+    if (result.success) navigate('/dashboard');
+    else setError(result.error || 'Registration failed');
   };
 
   return (
