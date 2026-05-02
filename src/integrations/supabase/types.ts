@@ -206,6 +206,96 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_accounts: {
+        Row: {
+          id: string
+          user_id: string
+          bank_name: string
+          account_number: string
+          ifsc_code: string
+          account_holder: string
+          balance: number
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          bank_name: string
+          account_number: string
+          ifsc_code: string
+          account_holder: string
+          balance?: number
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          bank_name?: string
+          account_number?: string
+          ifsc_code?: string
+          account_holder?: string
+          balance?: number
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_settings: {
+        Row: {
+          id: string
+          user_id: string
+          upi_id: string | null
+          upi_name: string | null
+          security_notifications: boolean
+          payment_notifications: boolean
+          monthly_reports: boolean
+          biometric_enabled: boolean
+          pin_set: boolean
+          dark_mode: boolean
+          currency: string
+          language: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          upi_id?: string | null
+          upi_name?: string | null
+          security_notifications?: boolean
+          payment_notifications?: boolean
+          monthly_reports?: boolean
+          biometric_enabled?: boolean
+          pin_set?: boolean
+          dark_mode?: boolean
+          currency?: string
+          language?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          upi_id?: string | null
+          upi_name?: string | null
+          security_notifications?: boolean
+          payment_notifications?: boolean
+          monthly_reports?: boolean
+          biometric_enabled?: boolean
+          pin_set?: boolean
+          dark_mode?: boolean
+          currency?: string
+          language?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

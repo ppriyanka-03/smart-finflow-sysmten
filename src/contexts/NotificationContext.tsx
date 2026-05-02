@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 
 export interface Notification {
   id: string;
   text: string;
-  time: string;
+  created_at: string;
   read: boolean;
   type: 'payment' | 'cashback' | 'emi' | 'system';
 }
@@ -36,55 +35,48 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (data) {
-      setNotifications(data.map((n: any) => ({
-        id: n.id, text: n.text, time: timeAgo(n.created_at), read: n.read, type: n.type,
-      })));
-    }
+    
+    // For local auth, get notifications from localStorage or use mock data
+    const mockNotifications: Notification[] = [
+      {
+        id: '1',
+        text: 'Welcome to SmartFinance!',
+        created_at: new Date().toISOString(),
+        read: false,
+        type: 'system'
+      }
+    ];
+    
+    setNotifications(mockNotifications);
   }, [user]);
 
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
-  // Real-time subscription
+  // Real-time subscription (disabled for local auth)
   useEffect(() => {
     if (!user) return;
-    const channel = supabase
-      .channel('notifications-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
-        const n = payload.new as any;
-        setNotifications(prev => [{
-          id: n.id, text: n.text, time: 'Just now', read: false, type: n.type,
-        }, ...prev].slice(0, 50));
-      })
-      .subscribe();
+    // Local auth doesn't need real-time subscriptions
+  }, []);
 
-    return () => { supabase.removeChannel(channel); };
-  }, [user]);
+  const addNotification = useCallback((text: string, type: Notification['type']) => {
+    const newNotification: Notification = {
+      id: Date.now().toString(),
+      text,
+      created_at: new Date().toISOString(),
+      read: false,
+      type
+    };
+    
+    setNotifications(prev => [newNotification, ...prev].slice(0, 50));
+  }, []);
 
-  const addNotification = useCallback(async (text: string, type: Notification['type']) => {
-    if (!user) return;
-    await supabase.from('notifications').insert({ user_id: user.id, text, type });
-    // Real-time subscription will update the state
-  }, [user]);
-
-  const markAllRead = useCallback(async () => {
-    if (!user) return;
-    await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
+  const markAllRead = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  }, [user]);
+  }, []);
 
-  const clearAll = useCallback(async () => {
-    if (!user) return;
-    await supabase.from('notifications').delete().eq('user_id', user.id);
+  const clearAll = useCallback(() => {
     setNotifications([]);
-  }, [user]);
+  }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 

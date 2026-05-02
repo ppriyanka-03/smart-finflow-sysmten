@@ -14,6 +14,40 @@ const Reports = () => {
     { name: 'EMI Amortization Schedule', type: 'EMI', date: '2026-02-10', size: '0.8 MB' },
   ];
 
+  const handleDownloadReport = (reportName: string) => {
+    if (!finance.transactions || finance.transactions.length === 0) {
+      alert('No data to download');
+      return;
+    }
+
+    const headers = ['Date', 'Type', 'Amount', 'Description', 'Method', 'Recipient'];
+    const rows = finance.transactions.map((tx) => [
+      tx.date,
+      tx.type.charAt(0).toUpperCase() + tx.type.slice(1),
+      tx.amount.toFixed(2),
+      tx.description.replace(/\r?\n/g, ' '),
+      tx.method ?? '',
+      tx.recipient ?? '',
+    ]);
+
+    const escapeCell = (value: string) => {
+      const escaped = value.replace(/"/g, '""');
+      return `"${escaped}"`;
+    };
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((cell) => escapeCell(String(cell))).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'financial_report.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -53,7 +87,12 @@ const Reports = () => {
                 <p className="text-xs text-muted-foreground">{r.type} • {r.date} • {r.size}</p>
               </div>
             </div>
-            <Button variant="ghost" size="sm" className="text-primary hover:text-primary hover:bg-primary/10">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-primary hover:text-primary hover:bg-primary/10"
+              onClick={() => handleDownloadReport(r.name)}
+            >
               <Download className="w-4 h-4" />
             </Button>
           </motion.div>

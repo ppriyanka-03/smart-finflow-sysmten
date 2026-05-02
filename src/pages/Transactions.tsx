@@ -58,7 +58,9 @@ const Transactions = () => {
       <div className="glass-card divide-y divide-border">
         {filtered.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">No transactions found</div>
-        ) : filtered.map((tx, i) => (
+        ) : filtered.map((tx, i) => {
+          const isIncome = tx.type ? (tx.type === 'income' || tx.type === 'cashback') : tx.amount > 0;
+          return (
           <motion.div
             key={tx.id}
             initial={{ opacity: 0, x: -10 }}
@@ -68,9 +70,9 @@ const Transactions = () => {
           >
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                tx.type === 'income' || tx.type === 'cashback' ? 'bg-success/20 text-success' : 'bg-destructive/20 text-destructive'
+                isIncome ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'
               }`}>
-                {tx.type === 'income' || tx.type === 'cashback' ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                {isIncome ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
               </div>
               <div>
                 <p className="text-sm font-medium">{tx.description}</p>
@@ -82,13 +84,13 @@ const Transactions = () => {
               </div>
             </div>
             <div className="text-right">
-              <p className={`text-sm font-semibold ${tx.type === 'income' || tx.type === 'cashback' ? 'text-success' : 'text-destructive'}`}>
-                {tx.type === 'income' || tx.type === 'cashback' ? '+' : '-'}{formatCurrency(tx.amount)}
+              <p className={`text-sm font-semibold ${isIncome ? 'text-green-500' : 'text-red-500'}`}>
+                {isIncome ? '+' : '-'}{formatCurrency(Math.abs(tx.amount))}
               </p>
-              {tx.cashbackEarned && <p className="text-xs text-success">+₹{tx.cashbackEarned} cashback</p>}
+              {tx.cashbackEarned && <p className="text-xs text-green-500">+₹{tx.cashbackEarned} cashback</p>}
             </div>
           </motion.div>
-        ))}
+        )})}
       </div>
     </div>
   );

@@ -20,7 +20,7 @@ const navItems = [
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
-const AppSidebar = () => {
+const AppSidebar = ({ open = false, onClose }: { open?: boolean; onClose?: () => void }) => {
   const [collapsed, setCollapsed] = useState(false);
   const { logout } = useAuth();
   const location = useLocation();
@@ -29,7 +29,7 @@ const AppSidebar = () => {
     <motion.aside
       animate={{ width: collapsed ? 72 : 260 }}
       transition={{ duration: 0.3, ease: 'easeInOut' }}
-      className="h-screen sticky top-0 flex flex-col bg-sidebar border-r border-sidebar-border sidebar-glow z-30"
+      className={`h-screen sticky top-0 flex flex-col bg-sidebar border-r border-sidebar-border sidebar-glow z-30 mobile-sidebar ${open ? 'mobile-open' : ''}`}
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border">
@@ -53,6 +53,7 @@ const AppSidebar = () => {
             <NavLink
               key={item.path}
               to={item.path}
+              onClick={onClose}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative ${
                 isActive
                   ? 'bg-primary/10 text-primary'

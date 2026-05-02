@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Enable Email Signups - Smart Finance</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        .step { background: #e3f2fd; padding: 20px; margin: 20px 0; border-radius: 5px; border-left: 4px solid #2196f3; }
+        .button { background: #4caf50; color: white; padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer; font-size: 18px; text-decoration: none; display: inline-block; }
+        .button:hover { background: #45a049; }
+        .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 5px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Enable Email Signups - Fix Login Error</h1>
+        
+        <div class="warning">
+            <strong>⚠️ Current Issue:</strong> Email signups are disabled in Supabase, preventing new user registration.
+        </div>
+        
+        <h2>🚀 Quick Fix - Enable Signups</h2>
+        
+        <div class="step">
+            <h3>Step 1: Open Supabase Auth Settings</h3>
+            <p>Click the button below to open the exact settings page:</p>
+            <a href="https://njgsuadqylclghesoavg.supabase.co/project/auth/settings" target="_blank" class="button">🔐 Open Supabase Auth Settings</a>
+        </div>
+        
+        <div class="step">
+            <h3>Step 2: Enable Signups</h3>
+            <p>In the Supabase Auth Settings page:</p>
+            <ol>
+                <li>Find the section "Allow new users to sign up"</li>
+                <li>Toggle the switch to <strong>ON</strong></li>
+                <li>Click the <strong>Save</strong> button</li>
+            </ol>
+        </div>
+        
+        <div class="step">
+            <h3>Step 3: Apply Database Schema</h3>
+            <p>After enabling signups, apply the database schema:</p>
+            <a href="https://njgsuadqylclghesoavg.supabase.co/project/sql" target="_blank" class="button">🗄️ Open SQL Editor</a>
+            <p style="margin-top: 10px;">Paste the SQL from <code>QUICK_FIX.md</code> and click "Run"</p>
+        </div>
+        
+        <div class="step">
+            <h3>Step 4: Test Registration</h3>
+            <p>Once both steps are complete, test the application:</p>
+            <a href="http://localhost:4000" target="_blank" class="button">📱 Open Application</a>
+        </div>
+        
+        <div class="success">
+            <strong>✅ Expected Result:</strong> After enabling signups and applying the database schema, you should be able to:
+            <ul>
+                <li>Create new accounts</li>
+                <li>Login successfully</li>
+                <li>Access the dashboard</li>
+            </ul>
+        </div>
+        
+        <h2>📋 Quick Checklist</h2>
+        <ul>
+            <li>☐ Enable "Allow new users to sign up" in Supabase Auth Settings</li>
+            <li>☐ Apply database schema in SQL Editor</li>
+            <li>☐ Test registration at http://localhost:4000</li>
+            <li>☐ Test login functionality</li>
+        </ul>
+    </div>
+</body>
+</html>

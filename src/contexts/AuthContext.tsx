@@ -1,78 +1,150 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface User {
   id: string;
   email: string;
   name: string;
-  avatar?: string;
+  password?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (name: string, email: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const mapUser = (su: SupabaseUser): User => ({
-  id: su.id,
-  email: su.email || '',
-  name: su.user_metadata?.name || su.email?.split('@')[0] || '',
-  avatar: su.user_metadata?.avatar_url,
-});
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
 
+  const mapSessionUser = (sessionUser: any): User | null => {
+    if (!sessionUser?.email) return null;
+    return {
+      id: sessionUser.id,
+      email: sessionUser.email,
+      name:
+        sessionUser.user_metadata?.display_name ??
+        sessionUser.user_metadata?.full_name ??
+        sessionUser.email.split('@')[0],
+    };
+  };
+
+  // Load Supabase session user on refresh and auth changes.
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUser(mapUser(session.user));
-      } else {
-        setUser(null);
+    let mounted = true;
+
+    const loadSession = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (!mounted) return;
+        
+        if (error) {
+          console.error('Auth session error:', error);
+          return;
+        }
+        
+        setUser(mapSessionUser(data.session?.user ?? null));
+      } catch (error) {
+        console.error('Failed to load auth session:', error);
       }
-      setLoading(false);
+    };
+
+    loadSession();
+
+    const { data: authSubscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setUser(mapSessionUser(session?.user ?? null));
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser(mapUser(session.user));
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      authSubscription.subscription.unsubscribe();
+    };
   }, []);
 
-  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { success: false, error: error.message };
-    return { success: true };
-  };
+  // Register user in Supabase Auth.
+  const register = useCallback(async (name: string, email: string, password: string): Promise<boolean> => {
+    try {
+      const trimmedEmail = email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+        options: {
+          data: {
+            display_name: name,
+            full_name: name,
+          },
+        },
+      });
 
-  const register = async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name } },
-    });
-    if (error) return { success: false, error: error.message };
-    return { success: true };
-  };
+      if (error) {
+        console.error('Registration failed:', error.message);
+        return false;
+      }
 
-  const logout = () => {
-    supabase.auth.signOut();
-  };
+      const mapped = mapSessionUser(data.user);
+      if (mapped) {
+        setUser(mapped);
+        console.log('User registered successfully. Data will be initialized on first login.');
+      }
+      return true;
+    } catch (error) {
+      console.error('Registration error:', error);
+      return false;
+    }
+  }, []);
+
+  // Login via Supabase email/password auth.
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+    try {
+      const trimmedEmail = email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      });
+
+      if (error) {
+        console.error('Login failed:', error.message);
+        return false;
+      }
+
+      const mapped = mapSessionUser(data.user);
+      if (!mapped) return false;
+      setUser(mapped);
+      return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
+    }
+  }, []);
+
+  // Logout from Supabase - only clears session, preserves database data
+  const logout = useCallback(async () => {
+    try {
+      // Only sign out from auth session, do NOT delete database data
+      await supabase.auth.signOut();
+      setUser(null);
+      console.log('User logged out successfully. Database data preserved.');
+    } catch (error) {
+      console.error('Logout error:', error);
+      setUser(null);
+    }
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!user,
+        login,
+        register,
+        logout
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
