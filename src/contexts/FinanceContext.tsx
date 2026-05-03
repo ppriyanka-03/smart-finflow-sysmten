@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { RazorpayService } from '@/services/razorpay-service';
 
 export interface Transaction {
   id: string;
@@ -75,6 +76,7 @@ interface FinanceContextType extends FinanceState {
   addEMI: (loan: Omit<EMILoan, 'id' | 'paidMonths' | 'startDate'>) => Promise<void>;
   payEMI: (loanId: string) => Promise<boolean>;
   refreshData: () => Promise<void>;
+  setBankAccounts: React.Dispatch<React.SetStateAction<BankAccount[]>>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -331,27 +333,40 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const makePayment = useCallback(async (recipient: string, amount: number, method: string, description: string, recipientEmail?: string) => {
-    console.log('Payment validation:', { user: !!user, amount, totalBalance: state.totalBalance, amountExceedsBalance: amount > state.totalBalance });
-    
     if (!user) {
-      console.error('Payment failed: No user logged in');
-      return { success: false, cashback: 0, error: 'No user logged in' };
-    }
-    
-    if (amount > state.totalBalance) {
-      console.error('Payment failed: Insufficient balance', { amount, totalBalance: state.totalBalance });
-      return { success: false, cashback: 0, error: 'Insufficient balance' };
+      return { success: false, cashback: 0, error: 'User not authenticated' };
     }
 
-    let cashbackRate = 0;
-    if (method === 'Wallet') cashbackRate = 0.05;
-    else if (method === 'Card') cashbackRate = 0.02;
-    else if (method === 'Net Banking') cashbackRate = 0.01;
-
-    const cashback = Math.min(amount * cashbackRate, 500);
+    console.log('🚀 Starting payment process:', { recipient, amount, method, description, recipientEmail });
 
     try {
-      // Insert payment transaction
+      // 🚀 STEP 1: Process payment through Razorpay if method is 'Razorpay'
+      if (method === 'Razorpay') {
+        console.log('Processing payment through Razorpay...');
+        
+        const razorpayResult = await RazorpayService.completePayment(
+          amount,
+          description,
+          user.email,
+          {
+            recipient,
+            method,
+            recipient_email: recipientEmail,
+          }
+        );
+
+        if (!razorpayResult.success) {
+          console.error('Razorpay payment failed:', razorpayResult.error);
+          return { success: false, cashback: 0, error: razorpayResult.error || 'Razorpay payment failed' };
+        }
+
+        console.log('Razorpay payment successful:', razorpayResult);
+      }
+
+      // 🚀 STEP 2: Calculate cashback (5% for Card/UPI, 2% for others)
+      const cashback = (method === 'Card' || method === 'UPI') ? Math.floor(amount * 0.05) : Math.floor(amount * 0.02);
+
+      // 🚀 STEP 3: Insert payment transaction
       console.log('Creating payment transaction:', { user_id: user.id, type: 'payment', description, amount, method, recipient });
       
       const { error: txError, data: txData } = await supabase.from('transactions').insert({
@@ -360,7 +375,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         description, 
         amount, 
         method, 
-        recipient,
+        recipient: recipient || 'Unknown',
         recipient_email: recipientEmail || null, 
         cashback_earned: cashback > 0 ? cashback : null,
         date: new Date().toISOString(),
@@ -368,14 +383,13 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
       if (txError) { 
         console.error('Transaction insert failed:', txError); 
-        // ❌ CRITICAL: Do NOT use local state fallback - it causes data loss
-        // Instead, return failure so user knows transaction wasn't saved
-        return { success: false, cashback: 0 } as { success: false; cashback: number; error?: string };
+        console.error('Error details:', JSON.stringify(txError, null, 2));
+        return { success: false, cashback: 0, error: `Failed to save transaction: ${txError.message}` };
       }
 
       console.log('Transaction created successfully:', txData);
 
-      // Insert cashback transaction if earned
+      // 🚀 STEP 4: Insert cashback transaction if earned
       if (cashback > 0) {
         const { error: cashbackError } = await supabase.from('transactions').insert({
           user_id: user.id, 
@@ -387,11 +401,15 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
         
         if (cashbackError) {
           console.error('Cashback transaction failed:', cashbackError);
-          // Continue with payment even if cashback fails - main transaction is saved
         }
       }
 
-      // Update wallet
+      // 🚀 STEP 5: Update wallet balances
+      console.log('Updating wallet balances:', { 
+        total_balance: state.totalBalance - amount + cashback,
+        wallet_balance: method === 'Wallet' ? state.walletBalance - amount + cashback : state.walletBalance + cashback 
+      });
+      
       const { error: walletError } = await supabase.from('wallets').update({
         total_balance: state.totalBalance - amount + cashback,
         wallet_balance: method === 'Wallet' ? state.walletBalance - amount + cashback : state.walletBalance + cashback,
@@ -402,38 +420,21 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
       if (walletError) {
         console.error('Wallet update failed:', walletError);
-        // ❌ CRITICAL: Do NOT use local state fallback - it causes balance inconsistency
-        // Return failure to indicate the transaction wasn't fully processed
-        return { success: false, cashback: 0, error: 'Failed to update wallet balance' } as { success: false; cashback: number; error?: string };
-      } else {
-        // ✅ SUCCESS: Refresh data from database to ensure consistency
-        console.log('Wallet updated successfully, refreshing data...');
-        await fetchData();
-        console.log('Data refresh completed after payment');
+        console.error('Wallet error details:', JSON.stringify(walletError, null, 2));
+        // Continue even if wallet update fails - transaction is already saved
+        console.log('Transaction saved but wallet update failed - will refresh to sync');
       }
+
+      // 🚀 STEP 6: Refresh data from database to ensure consistency
+      console.log('Wallet updated successfully, refreshing data...');
+      await fetchData();
+      console.log('Data refresh completed after payment');
 
       return { success: true, cashback };
     } catch (error) {
-      console.error('Payment processing error:', error);
-      return { success: false, cashback: 0 };
+      console.error('Payment process failed:', error);
+      return { success: false, cashback: 0, error: 'Payment processing failed' };
     }
-
-    // Send email notification via edge function if recipient email provided
-    if (recipientEmail) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          await supabase.functions.invoke('send-payment-email', {
-            body: { recipientEmail, recipientName: recipient, amount, description, method, senderName: user.name },
-          });
-        }
-      } catch (error) {
-        console.error('Email notification failed:', error);
-      }
-    }
-
-    await fetchData();
-    return { success: true, cashback };
   }, [user, state.totalBalance, state.walletBalance, state.monthlyExpenses, state.totalCashback, state.monthCashback, fetchData]);
 
   const addEMI = useCallback(async (loan: Omit<EMILoan, 'id' | 'paidMonths' | 'startDate'>) => {
@@ -471,6 +472,13 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     await fetchData();
   }, [fetchData]);
 
+  const setBankAccounts = useCallback((update: React.SetStateAction<BankAccount[]>) => {
+    setState(prev => ({
+      ...prev,
+      bankAccounts: typeof update === 'function' ? update(prev.bankAccounts) : update,
+    }));
+  }, []);
+
   const value = {
     user,
     ...state,
@@ -478,6 +486,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     addEMI,
     payEMI,
     refreshData,
+    setBankAccounts,
   };
 
 return (

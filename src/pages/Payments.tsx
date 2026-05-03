@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import QRCode from 'qrcode';
 import jsQR from 'jsqr';
-import { RazorpayPaymentService } from '@/services/razorpay-fixed';
+import { RazorpayService } from '@/services/razorpay-service';
 
 const actionCards = [
   { id: 'payMobile', label: 'Pay to Mobile', icon: Smartphone, subtitle: 'Send quick UPI payment' },
@@ -25,7 +25,7 @@ type PaymentAction = 'payMobile' | 'bankTransfer' | 'selfTransfer' | 'scanQR' | 
 
 const Payments = () => {
   const { user } = useAuth();
-  const { makePayment, totalBalance, walletBalance, transactions, bankAccounts } = useFinance();
+  const { makePayment, totalBalance, walletBalance, transactions, bankAccounts, setBankAccounts } = useFinance();
   const [loading, setLoading] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -470,120 +470,85 @@ const Payments = () => {
     const { action, amount: txAmount, method, recipient, description: desc } = pendingTransaction;
     let cashback = 0;
 
-    if (action === 'bankTransfer') {
-      const bank = getSelectedBank();
-      // Bank account balance will be updated via database refresh after payment
-      const result = await makePayment(recipient, txAmount, method, desc);
-      cashback = result.cashback;
-    } else if (action === 'payMobile') {
-      const selectedAccountId = pendingTransaction.meta?.accountId ?? bankAccountId;
-      const selectedBank = bankAccounts.find(account => account.id === selectedAccountId);
+    try {
+      if (action === 'bankTransfer') {
+        const bank = getSelectedBank();
+        // Process payment through FinanceContext
+        const result = await makePayment(recipient, txAmount, method, desc);
+        cashback = result.cashback;
+        toast.success('Bank transfer completed successfully!');
+      } else if (action === 'payMobile') {
+        const selectedAccountId = pendingTransaction.meta?.accountId ?? bankAccountId;
+        const selectedBank = bankAccounts.find(account => account.id === selectedAccountId);
 
-      if (!selectedBank) {
-        setErrorMsg('Select a valid bank account before paying.');
-        setStatus('error');
-        setPinModalOpen(false);
-        return;
-      }
-
-      if (txAmount <= 0 || txAmount > selectedBank.balance || txAmount > totalBalance) {
-        setErrorMsg('Unable to process payment due to invalid amount or balance.');
-        setStatus('error');
-        setPinModalOpen(false);
-        return;
-      }
-
-      // Initialize Razorpay and create payment order
-      try {
-        // Initialize Razorpay with environment variable
-        const razorpayKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
-        if (razorpayKeyId) {
-          RazorpayPaymentService.initialize(razorpayKeyId);
-        }
-
-        // Create payment order
-        const orderResult = await RazorpayPaymentService.createOrder(
-          txAmount,
-          desc || `Payment to ${recipient}`,
-          user?.email
-        );
-
-        if (orderResult.error) {
-          setErrorMsg(`Payment order failed: ${orderResult.error}`);
+        if (!selectedBank) {
+          setErrorMsg('Select a valid bank account before paying.');
           setStatus('error');
           setPinModalOpen(false);
           return;
         }
 
-        // Open Razorpay payment modal
-        const paymentResult = await RazorpayPaymentService.openPaymentModal({
-          key: razorpayKeyId,
-          amount: txAmount * 100, // Convert to paise
-          currency: 'INR',
-          name: 'Smart Finance Hub',
-          description: desc || `Payment to ${recipient}`,
-          image: 'https://example.com/payment-logo.png',
-          order_id: orderResult.orderId,
-          prefill: {
-            contact: recipient,
-            email: user?.email,
-          },
-        });
-
-        if (!paymentResult.success) {
-          setErrorMsg(`Payment failed: ${paymentResult.error}`);
+        if (txAmount <= 0 || txAmount > selectedBank.balance || txAmount > totalBalance) {
+          setErrorMsg('Unable to process payment due to invalid amount or balance.');
           setStatus('error');
           setPinModalOpen(false);
           return;
         }
 
-        // Payment successful - create transaction record
-        const transactionResult = await makePayment(
+        // 🚀 Process payment through Razorpay via FinanceContext
+        const result = await makePayment(
           recipient,
           txAmount,
-          'Razorpay',
+          'upi', // Use upi method (valid in database constraint - lowercase only)
           desc || `Payment to ${recipient}`,
           user?.email
         );
 
-        if (transactionResult.success) {
-          cashback = transactionResult.cashback;
-          toast.success('Payment completed successfully!');
-        } else {
-          setErrorMsg(`Transaction recording failed: ${transactionResult.error}`);
+        if (!result.success) {
+          setErrorMsg(`Payment failed: ${result.error}`);
           setStatus('error');
           setPinModalOpen(false);
           return;
         }
-      } catch (error) {
-        console.error('Razorpay payment error:', error);
-        setErrorMsg('Payment processing failed. Please try again.');
-        setStatus('error');
-        setPinModalOpen(false);
-        return;
-      }
-    } else if (action === 'selfTransfer') {
-      const from = getSelfFromAccount();
-      const to = getSelfToAccount();
-      if (from && to) {
-        // Bank account balances will be updated via database refresh after payment
-        
-        const transferResult = await makePayment(recipient, txAmount, method, desc);
-        
-        if (!transferResult.success) {
-          console.error('Transfer failed:', transferResult.error);
-          toast.error(transferResult.error || 'Transfer failed');
-          setStatus('error');
-          setPinModalOpen(false);
-          return;
-        }
-      }
-    }
 
-    setCashbackEarned(cashback);
-    setStatus('success');
-    setPinModalOpen(false);
-    resetForm();
+        cashback = result.cashback;
+        toast.success('Payment completed successfully!');
+        
+        // Deduct balance from bank account
+        setBankAccounts(prev =>
+          prev.map(acc =>
+            acc.id === selectedAccountId
+              ? { ...acc, balance: acc.balance - txAmount }
+              : acc
+          )
+        );
+      } else if (action === 'selfTransfer') {
+        const from = getSelfFromAccount();
+        const to = getSelfToAccount();
+        if (from && to) {
+          const transferResult = await makePayment(recipient, txAmount, method, desc);
+          
+          if (!transferResult.success) {
+            console.error('Transfer failed:', transferResult.error);
+            toast.error(transferResult.error || 'Transfer failed');
+            setStatus('error');
+            setPinModalOpen(false);
+            return;
+          }
+          toast.success('Self transfer completed successfully!');
+        }
+      }
+
+      setCashbackEarned(cashback);
+      setStatus('success');
+      setPinModalOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error('Payment processing error:', error);
+      setErrorMsg('Payment processing failed. Please try again.');
+      setStatus('error');
+      setPinModalOpen(false);
+    }
   };
 
   const recentTransactions = transactions.filter(tx => tx.type === 'payment' || tx.type === 'cashback').slice(0, 5);
