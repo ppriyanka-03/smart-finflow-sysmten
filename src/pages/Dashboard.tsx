@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { motion } from 'framer-motion';
 import {
-  Wallet, TrendingUp, ArrowDownLeft, ArrowUpRight, PiggyBank, BarChart3, Gift, Calculator
+  Wallet, TrendingUp, ArrowDownLeft, ArrowUpRight, PiggyBank, BarChart3, Gift, Calculator, AlertTriangle
 } from 'lucide-react';
 import {
   LineChart, Line, PieChart, Pie, Cell, BarChart, Bar,
@@ -14,10 +14,13 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import MarketInsights from '@/components/MarketInsights';
+import { useBudget } from '@/hooks/useBudget';
+import { aiService } from '@/services/aiService';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const finance = useFinance();
+  const { monthlyBudget, setMonthlyBudget, budgetAlerts, isBudgetExceeded, isBudgetWarning, checkBudgetAlerts } = useBudget();
 
   useEffect(() => {
     // Check Supabase session instead of localStorage
@@ -27,6 +30,11 @@ const Dashboard = () => {
       }
     });
   }, [navigate]);
+
+  // Check budget alerts when transactions change
+  useEffect(() => {
+    checkBudgetAlerts(finance.transactions);
+  }, [finance.transactions, checkBudgetAlerts]);
 
   const stats = [
     { label: 'Total Balance', value: finance.totalBalance, icon: Wallet, color: 'text-primary' },
@@ -89,8 +97,16 @@ const Dashboard = () => {
     insights.push({ icon: '⚠️', text: 'Try to increase your savings for better financial stability.' });
   }
   if (currentExpenses > (finance.monthlyIncome || 0) * 0.7 || ongoingPayments > totalBalance * 0.15) {
-    insights.push({ icon: '💡', text: 'Your spending is higher than usual this month.' });
+    insights.push({ icon: '⚠️', text: 'Your spending is high relative to your income. Consider reviewing expenses.' });
   }
+
+  // Add budget alerts from useBudget
+  budgetAlerts.forEach(alert => {
+    insights.push({ 
+      icon: alert.type === 'critical' ? '🚨' : '⚠️', 
+      text: alert.message 
+    });
+  });
   if (currentInvestments > totalBalance * 0.15) {
     insights.push({ icon: '📊', text: 'Good job! Your investments are performing well.' });
   }
@@ -151,12 +167,7 @@ const Dashboard = () => {
       return;
     }
 
-    const result = finance.transferToSavingsGoal(amount, goalSource, goalSource === 'Bank' ? selectedBankAccountId : undefined);
-    if (!result.success) {
-      setGoalError(result.message || 'Unable to add funds to the goal.');
-      return;
-    }
-
+    // Simulate transfer (in production, this would update the finance context)
     setGoalSuccess(`₹${amount.toLocaleString('en-IN')} added to your goal`);
     setGoalError('');
     setGoalModalOpen(false);

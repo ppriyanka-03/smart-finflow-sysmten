@@ -1,7 +1,8 @@
 import { useFinance } from '@/contexts/FinanceContext';
 import { motion } from 'framer-motion';
-import { Gift, Trophy, Star } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Gift, Trophy, Star, TrendingUp } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { aiService } from '@/services/aiService';
 
 const rewardLevels = [
   { name: 'Bronze', min: 0, max: 1000, color: '#cd7f32', icon: '🥉' },
@@ -13,6 +14,15 @@ const rewardLevels = [
 const Cashback = () => {
   const finance = useFinance();
   const cashbackTxs = finance.transactions.filter(t => t.type === 'cashback');
+
+  // Generate cashback trends using aiService
+  const spendingTrends = aiService.getSpendingTrends(finance.transactions);
+  
+  // Calculate cashback rate
+  const totalExpenses = finance.transactions
+    .filter(t => t.type === 'payment')
+    .reduce((sum, t) => sum + t.amount, 0);
+  const cashbackRate = totalExpenses > 0 ? (finance.totalCashback / totalExpenses) * 100 : 0;
 
   const currentLevel = rewardLevels.find(l => finance.totalCashback >= l.min && finance.totalCashback < l.max) || rewardLevels[rewardLevels.length - 1];
   const nextLevel = rewardLevels[rewardLevels.indexOf(currentLevel) + 1];
@@ -58,6 +68,20 @@ const Cashback = () => {
         </div>
       </div>
 
+      {/* Cashback Rate */}
+      <div className="glass-card p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-display font-semibold">Cashback Rate</h3>
+            <p className="text-sm text-muted-foreground">Your effective cashback rate on all transactions</p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-display font-bold text-success">{cashbackRate.toFixed(1)}%</p>
+            <p className="text-xs text-muted-foreground">₹{finance.totalCashback.toLocaleString()} earned</p>
+          </div>
+        </div>
+      </div>
+
       {/* Reward Progress */}
       <div className="glass-card p-5 glow-effect">
         <h3 className="font-display font-semibold mb-3">Reward Level Progress</h3>
@@ -93,6 +117,26 @@ const Cashback = () => {
             <Tooltip contentStyle={{ background: 'hsl(222 40% 10%)', border: '1px solid hsl(222 30% 22%)', borderRadius: '8px' }} />
             <Bar dataKey="cashback" fill="#10b981" radius={[6, 6, 0, 0]} />
           </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Cashback Trends */}
+      <div className="glass-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display font-semibold">Cashback Trends</h3>
+          <div className="flex items-center gap-2 text-sm text-success">
+            <TrendingUp className="w-4 h-4" />
+            <span>+{cashbackRate.toFixed(1)}% effective rate</span>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={monthlyData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 30% 18%)" />
+            <XAxis dataKey="month" stroke="hsl(215 20% 55%)" fontSize={12} />
+            <YAxis stroke="hsl(215 20% 55%)" fontSize={12} tickFormatter={v => `₹${v}`} />
+            <Tooltip contentStyle={{ background: 'hsl(222 40% 10%)', border: '1px solid hsl(222 30% 22%)', borderRadius: '8px' }} />
+            <Line type="monotone" dataKey="cashback" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 4 }} />
+          </LineChart>
         </ResponsiveContainer>
       </div>
 

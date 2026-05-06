@@ -1,5 +1,9 @@
 import { useFinance } from '@/contexts/FinanceContext';
 import { motion } from 'framer-motion';
+import { SpendingChart } from '@/components/analytics/SpendingChart';
+import { CategoryChart } from '@/components/analytics/CategoryChart';
+import { InsightsCard } from '@/components/analytics/InsightsCard';
+import { aiService } from '@/services/aiService';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -7,6 +11,11 @@ import {
 
 const Analytics = () => {
   const finance = useFinance();
+
+  // Generate real data from transactions using aiService
+  const spendingTrends = aiService.getSpendingTrends(finance.transactions);
+  const categoryBreakdown = aiService.getCategoryBreakdown(finance.transactions);
+  const aiInsights = aiService.generateInsights(finance.transactions);
 
   const spendingTrend = [
     { month: 'Sep', amount: 62000 },
@@ -82,24 +91,21 @@ const Analytics = () => {
 
         <div className="glass-card p-5">
           <h3 className="font-display font-semibold mb-4">Category Breakdown</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={categoryData} cx="50%" cy="50%" innerRadius={65} outerRadius={105} paddingAngle={3} dataKey="value">
-                {categoryData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-              </Pie>
-              <Tooltip contentStyle={{ background: 'hsl(222 40% 10%)', border: '1px solid hsl(222 30% 22%)', borderRadius: '8px' }} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex flex-wrap gap-3 justify-center">
-            {categoryData.map(c => (
-              <div key={c.name} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: c.color }} />
-                {c.name}: ₹{(c.value/1000).toFixed(0)}k
-              </div>
-            ))}
-          </div>
+          <CategoryChart data={categoryBreakdown} />
         </div>
       </div>
+
+      {/* AI Insights Section */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5">
+        <h3 className="font-display font-semibold mb-4">AI Expense Insights</h3>
+        <InsightsCard insights={aiInsights} />
+      </motion.div>
+
+      {/* Real Spending Trends */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5">
+        <h3 className="font-display font-semibold mb-4">Recent Spending Trends</h3>
+        <SpendingChart data={spendingTrends} />
+      </motion.div>
     </div>
   );
 };

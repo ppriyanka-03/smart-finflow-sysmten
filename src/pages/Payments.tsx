@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useFinance, BankAccount } from '@/contexts/FinanceContext';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Smartphone, Building, Repeat, Camera, DollarSign, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Smartphone, Building, Repeat, Camera, DollarSign, CheckCircle, AlertCircle, Loader2, Mic } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -12,16 +12,18 @@ import { toast } from 'sonner';
 import QRCode from 'qrcode';
 import jsQR from 'jsqr';
 import { RazorpayService } from '@/services/razorpay-service';
+import { VoiceButton } from '@/features/voice/VoiceButton';
 
 const actionCards = [
   { id: 'payMobile', label: 'Pay to Mobile', icon: Smartphone, subtitle: 'Send quick UPI payment' },
   { id: 'bankTransfer', label: 'Bank Transfer', icon: Building, subtitle: 'Transfer to linked bank' },
   { id: 'selfTransfer', label: 'Self Transfer', icon: Repeat, subtitle: 'Move funds between accounts' },
   { id: 'scanQR', label: 'Scan QR / Show QR', icon: Camera, subtitle: 'Scan or display a demo QR' },
+  { id: 'voicePayment', label: 'Voice Payment', icon: Mic, subtitle: 'Speak to pay' },
   { id: 'checkBalance', label: 'Check Balance', icon: DollarSign, subtitle: 'View wallet and bank balances' },
 ];
 
-type PaymentAction = 'payMobile' | 'bankTransfer' | 'selfTransfer' | 'scanQR' | 'checkBalance';
+type PaymentAction = 'payMobile' | 'bankTransfer' | 'selfTransfer' | 'scanQR' | 'voicePayment' | 'checkBalance';
 
 const Payments = () => {
   const { user } = useAuth();
@@ -66,6 +68,11 @@ const Payments = () => {
   const [scannedName, setScannedName] = useState('');
   const [scannedAmount, setScannedAmount] = useState('');
   const [scannedRaw, setScannedRaw] = useState('');
+
+  // Voice payment state
+  const [voiceInitiated, setVoiceInitiated] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [voiceLanguage, setVoiceLanguage] = useState<'en-IN' | 'hi-IN'>('en-IN');
 
   useEffect(() => {
     if (bankAccounts.length > 0) {
@@ -255,6 +262,9 @@ const Payments = () => {
     setErrorMsg('');
     setPinEntry('');
     setPendingTransaction(null);
+    setVoiceInitiated(false);
+    setVoiceTranscript('');
+    setVoiceLanguage('en-IN');
   };
 
   const isActionReady = () => {
@@ -474,7 +484,7 @@ const Payments = () => {
       if (action === 'bankTransfer') {
         const bank = getSelectedBank();
         // Process payment through FinanceContext
-        const result = await makePayment(recipient, txAmount, method, desc);
+        const result = await makePayment(recipient, txAmount, method, desc, undefined, voiceInitiated, voiceTranscript, voiceLanguage);
         cashback = result.cashback;
         toast.success('Bank transfer completed successfully!');
       } else if (action === 'payMobile') {
@@ -501,7 +511,10 @@ const Payments = () => {
           txAmount,
           'upi', // Use upi method (valid in database constraint - lowercase only)
           desc || `Payment to ${recipient}`,
-          user?.email
+          user?.email,
+          voiceInitiated,
+          voiceTranscript,
+          voiceLanguage
         );
 
         if (!result.success) {
@@ -526,7 +539,7 @@ const Payments = () => {
         const from = getSelfFromAccount();
         const to = getSelfToAccount();
         if (from && to) {
-          const transferResult = await makePayment(recipient, txAmount, method, desc);
+          const transferResult = await makePayment(recipient, txAmount, method, desc, undefined, voiceInitiated, voiceTranscript, voiceLanguage);
           
           if (!transferResult.success) {
             console.error('Transfer failed:', transferResult.error);
@@ -737,6 +750,64 @@ const Payments = () => {
               </div>
             )}
 
+            {selectedAction === 'voicePayment' && (
+              <div className="rounded-3xl border border-border/50 bg-slate-950/60 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                    <Mic className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-semibold text-sm">Voice Payment</h3>
+                    <p className="text-xs text-muted-foreground">Speak naturally to make payments</p>
+                  </div>
+                </div>
+                
+                <VoiceButton
+                  onPaymentData={(amount, recipient, bankAccountId, transcript, language) => {
+                    const parsedAmount = parseFloat(amount);
+                    const selectedBank = bankAccountId 
+                      ? bankAccounts.find(account => account.id === bankAccountId)
+                      : bankAccounts.find(acc => acc.balance >= parsedAmount);
+
+                    if (!selectedBank) {
+                      toast.error('No bank account with sufficient balance found');
+                      return;
+                    }
+
+                    // Set pendingTransaction for voice payment
+                    setPendingTransaction({
+                      action: 'payMobile',
+                      title: 'Voice Payment',
+                      amount: parsedAmount,
+                      method: 'UPI',
+                      recipient: recipient,
+                      description: `Voice payment to ${recipient}`,
+                      meta: { accountId: selectedBank.id }
+                    });
+
+                    // Set voice metadata
+                    setVoiceInitiated(true);
+                    setVoiceTranscript(transcript || '');
+                    setVoiceLanguage(language || 'en-IN');
+
+                    // Open PIN modal
+                    setPinModalOpen(true);
+
+                    toast.success(`Voice payment detected: ₹${amount} → ${recipient}`);
+                  }}
+                  bankAccounts={bankAccounts}
+                />
+
+                {amount && mobileNumber && (
+                  <div className="mt-4 p-4 rounded-2xl bg-primary/10 border border-primary/20">
+                    <p className="text-xs text-muted-foreground mb-1">Payment Details</p>
+                    <p className="text-lg font-semibold">₹{amount}</p>
+                    <p className="text-sm text-muted-foreground">{mobileNumber}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {selectedAction === 'checkBalance' && (
               <div className="space-y-4">
                 <div className="rounded-3xl border border-border/50 bg-slate-950/60 p-5">
@@ -756,7 +827,7 @@ const Payments = () => {
               </div>
             )}
 
-            {selectedAction !== 'scanQR' && selectedAction !== 'checkBalance' && (
+            {selectedAction !== 'scanQR' && selectedAction !== 'checkBalance' && selectedAction !== 'voicePayment' && (
               <Button onClick={processPayment} className="w-full h-12 bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 disabled:opacity-50" disabled={!isActionReady() || processingPayment}>
                 {processingPayment ? (
                   <>

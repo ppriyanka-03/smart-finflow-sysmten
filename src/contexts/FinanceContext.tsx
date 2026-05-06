@@ -13,6 +13,9 @@ export interface Transaction {
   recipient?: string;
   recipientEmail?: string;
   cashbackEarned?: number;
+  voiceInitiated?: boolean;
+  voiceTranscript?: string;
+  voiceLanguage?: string;
 }
 
 export interface EMILoan {
@@ -72,7 +75,7 @@ interface FinanceState {
 }
 
 interface FinanceContextType extends FinanceState {
-  makePayment: (recipient: string, amount: number, method: string, description: string, recipientEmail?: string) => Promise<{ success: boolean; cashback: number; error?: string }>;
+  makePayment: (recipient: string, amount: number, method: string, description: string, recipientEmail?: string, voiceInitiated?: boolean, voiceTranscript?: string, voiceLanguage?: string) => Promise<{ success: boolean; cashback: number; error?: string }>;
   addEMI: (loan: Omit<EMILoan, 'id' | 'paidMonths' | 'startDate'>) => Promise<void>;
   payEMI: (loanId: string) => Promise<boolean>;
   refreshData: () => Promise<void>;
@@ -332,12 +335,12 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const makePayment = useCallback(async (recipient: string, amount: number, method: string, description: string, recipientEmail?: string) => {
+  const makePayment = useCallback(async (recipient: string, amount: number, method: string, description: string, recipientEmail?: string, voiceInitiated?: boolean, voiceTranscript?: string, voiceLanguage?: string) => {
     if (!user) {
       return { success: false, cashback: 0, error: 'User not authenticated' };
     }
 
-    console.log('🚀 Starting payment process:', { recipient, amount, method, description, recipientEmail });
+    console.log('🚀 Starting payment process:', { recipient, amount, method, description, recipientEmail, voiceInitiated, voiceTranscript, voiceLanguage });
 
     try {
       // 🚀 STEP 1: Process payment through Razorpay if method is 'Razorpay'
@@ -367,12 +370,17 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
       const cashback = (method === 'Card' || method === 'UPI') ? Math.floor(amount * 0.05) : Math.floor(amount * 0.02);
 
       // 🚀 STEP 3: Insert payment transaction
-      console.log('Creating payment transaction:', { user_id: user.id, type: 'payment', description, amount, method, recipient });
+      console.log('Creating payment transaction:', { user_id: user.id, type: 'payment', description, amount, method, recipient, voiceInitiated, voiceTranscript, voiceLanguage });
+      
+      // Add voice metadata to description if voice-initiated
+      const finalDescription = voiceInitiated 
+        ? `${description} [Voice: ${voiceTranscript || 'N/A'} | Lang: ${voiceLanguage || 'en-IN'}]`
+        : description;
       
       const { error: txError, data: txData } = await supabase.from('transactions').insert({
         user_id: user.id, 
         type: 'payment', 
-        description, 
+        description: finalDescription, 
         amount, 
         method, 
         recipient: recipient || 'Unknown',

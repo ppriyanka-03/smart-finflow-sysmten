@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { motion } from 'framer-motion';
-import { useTheme } from 'next-themes';
-import { Bell, Copy, CreditCard, Key, Lock, Moon, Palette, Shield, Sparkles, Sun, Trash2, Upload, User } from 'lucide-react';
+import { Bell, Copy, CreditCard, Key, Lock, Palette, Shield, Sparkles, Trash2, Upload, User } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
+import { ThemeToggle } from '@/components/settings/ThemeToggle';
+import { LanguageSwitcher } from '@/components/settings/LanguageSwitcher';
 
 interface BankAccount {
   id: string;
@@ -74,8 +75,6 @@ const Settings = () => {
   const [bankError, setBankError] = useState('');
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('Bank');
   const [autoPay, setAutoPay] = useState(false);
-  const { theme: currentTheme, setTheme } = useTheme();
-  const theme = currentTheme === 'light' ? 'light' : 'dark';
   const [saved, setSaved] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [loadingSettings, setLoadingSettings] = useState(false);
@@ -92,15 +91,6 @@ const Settings = () => {
     setSaveMessage(message);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
-  };
-
-  const applyTheme = (nextTheme: 'dark' | 'light') => {
-    setTheme(nextTheme);
-    if (typeof document !== 'undefined') {
-      document.documentElement.classList.remove('light', 'dark');
-      document.documentElement.classList.add(nextTheme);
-    }
-    localStorage.setItem('sf_theme', nextTheme);
   };
 
   const hashPin = (pin: string) => {
@@ -150,7 +140,6 @@ const Settings = () => {
         budgetAlerts,
         savingsReminders,
       },
-      theme,
       updated_at: new Date().toISOString(),
     };
 
@@ -311,7 +300,6 @@ const Settings = () => {
       bankAccounts,
       paymentPreferences: { defaultPaymentMethod, autoPay },
       notifications: { transactionAlerts, paymentReminders, cashbackNotifications },
-      theme,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -350,7 +338,6 @@ const Settings = () => {
     setSavingsReminders(false);
     setTwoFA(false);
     setUpiPinSet(false);
-    applyTheme('dark');
     localStorage.removeItem('sf_settings');
     localStorage.removeItem('sf_theme');
     localStorage.removeItem('sf_upi_pin_hash');
@@ -385,7 +372,6 @@ const Settings = () => {
         setEnableAIInsights(data.ai_features?.enableAIInsights ?? false);
         setBudgetAlerts(data.ai_features?.budgetAlerts ?? false);
         setSavingsReminders(data.ai_features?.savingsReminders ?? false);
-        applyTheme((data.theme as 'dark' | 'light') ?? (localStorage.getItem('sf_theme') as 'dark' | 'light') ?? 'dark');
       } catch (error) {
         console.error('Settings load error:', error);
       }
@@ -393,15 +379,10 @@ const Settings = () => {
       // Set default values
       setName(user.name ?? '');
       setEmail(user.email);
-      applyTheme('dark');
     }
   };
 
   useEffect(() => {
-    const storedTheme = localStorage.getItem('sf_theme') as 'dark' | 'light' | null;
-    if (storedTheme) {
-      applyTheme(storedTheme);
-    }
     const storedPin = localStorage.getItem('sf_upi_pin_hash');
     if (storedPin) {
       setUpiPinSet(true);
@@ -656,15 +637,10 @@ const Settings = () => {
               <p className="text-xs text-muted-foreground">Dark or light interface preference</p>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={() => applyTheme('light')} className={`rounded-full px-3 py-2 text-sm ${theme === 'light' ? 'bg-white/10 text-foreground' : 'text-muted-foreground'}`}>
-                <Sun className="inline h-4 w-4 mr-2" /> Light
-              </button>
-              <button onClick={() => applyTheme('dark')} className={`rounded-full px-3 py-2 text-sm ${theme === 'dark' ? 'bg-white/10 text-foreground' : 'text-muted-foreground'}`}>
-                <Moon className="inline h-4 w-4 mr-2" /> Dark
-              </button>
+              <ThemeToggle />
+              <LanguageSwitcher />
             </div>
           </div>
-          <Button onClick={() => saveSettings()} className="bg-primary text-primary-foreground">Save Theme</Button>
         </div>
       ),
     },
